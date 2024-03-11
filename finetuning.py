@@ -10,7 +10,8 @@ import numpy as np
 import gc
 from PIL import Image
 
-
+# asssss hello heelli wiwoudlkejlajheoihoieaho
+print("hello")
 def sort_cmp (key):
     ans = 0
     for c in key:
