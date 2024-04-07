@@ -17,6 +17,14 @@ class BCIIV2aPreprocessor:
     def __init__(self, subj_ids, x_path='M:/RA Spring 24/Baseline_codes/BCICIV_2a_gdf/', 
                  y_path='M:/RA Spring 24/Baseline_codes/true_labels/', 
                  band=[0.5, 40]):
+        """
+        Initialize the preprocessor with subject IDs, data paths, and frequency band for filtering.
+        Parameters:
+        - subj_ids (list): List of subject IDs
+        - x_path (str): Path to the dataset directory.
+        - y_path (str): Path to the true label directory.
+        - band (list): Bandpass filter frequency range.
+        """
         self.subj_ids = subj_ids
         self.x_path = x_path
         self.y_path = y_path
@@ -28,12 +36,21 @@ class BCIIV2aPreprocessor:
         self.ch_idx = self._select_channels()
 
     def _select_channels(self):
+        """
+        Select EEG channels.
+
+        :return: list of selected channel indices
+        """
         # Function to select EEG channels
         eeg_ch_idx = [i for i, ch_name in enumerate(self.CH) if 'EEG' in ch_name]
         return eeg_ch_idx
 
     def load_true_labels_4class(self):
-        # Load true labels for subjects
+        """
+        Load true labels for subjects.
+
+        :return: lists of train and test labels
+        """
         train_labels_all, test_labels_all = [], []    
         for subj_id in self.subj_ids:
             tr_label_mat = scipy.io.loadmat(os.path.join(self.y_path, f'A0{subj_id}T.mat'))
@@ -48,6 +65,11 @@ class BCIIV2aPreprocessor:
         return train_labels_all, test_labels_all
 
     def extract_true_labels_2class(self):
+        """
+        Extract the binary labels from four class label lists.
+
+        :return: lists of binary train and test labels
+        """
         train_labels_all, test_labels_all = self.load_true_labels_4class()
         tr_label_bin_list, te_label_bin_list = [], []
         # Extract only 2 classes from the labels
@@ -56,6 +78,11 @@ class BCIIV2aPreprocessor:
         return tr_label_bin_list, te_label_bin_list
 
     def load_dataset_gdf(self):
+        """
+        Load the GDF file from the downloaded dataset located in the specified path.
+
+        :return: lists of gdf files of train and test data
+        """
         # Load EEG data for subjects
         bciiv2a_tr_list, bciiv2a_te_list = [],[]
         for subj_id in self.subj_ids:
@@ -75,25 +102,48 @@ class BCIIV2aPreprocessor:
         return bciiv2a_tr_list, bciiv2a_te_list
 
     def select_eeg_chans(self):
-        # Select EEG channels
+        """
+        Select the EEG channels.
+
+        :return: lists of indexes of the EEG channels
+        """
         eeg_ch_name = [self.CH[idx] for idx in self.ch_idx]
         return eeg_ch_name, self.ch_idx
 
     def arr_from_raw(self, list_l):
-        # Convert raw data to numpy arrays
+        """
+        Convert raw data to numpy arrays.
+        :param list_l: list of raw data
+        :return: list of arrays
+        """
         return [l.get_data() for l in list_l]
 
     def select_ch_raw_arr(self, list_l):
-        # Select EEG channels from raw data
+        """
+        Select EEG channels from raw data.
+        :param list_l: list of raw arrays
+        :return: list of raw array with EEG channels selected by indexes
+        """
         return [l[self.ch_idx, :] for l in list_l]
 
-    def bandpass_filter(self, list_l):   
-        # Apply bandpass filtering
+    def bandpass_filter(self, list_l):
+        """
+        Apply bandpass filter to raw data.
+        :param list_l: list of raw data
+        :return: list of filtered data
+        """
         sos = butter(5, self.band, 'bandpass', fs=250, output='sos')  
         return [np.array([sosfilt(sos, ch_data) for ch_data in subj_data]) for subj_data in list_l]
 
     def segment_data_upd(self, list_l, list_t, ival1, ival2):
-        # Segment the data
+        """
+        Segment data by segmenting the interval ival1 to ival2
+        :param list_l: list of raw data
+        :param list_t: list of time points
+        :param ival1: start point of interval
+        :param ival2: end point of interval
+        :return: list of segmented data
+        """
         seg_list = []
         for l, t in zip(list_l, list_t):
             l_list_sub = []
@@ -104,15 +154,32 @@ class BCIIV2aPreprocessor:
         return seg_list
 
     def create_x_data(self, list_l):
-        # Create X data from continuous data
+        """
+        Create x data from continuous data for all channels
+        :param list_l: list of continuous data (channels x data)
+        :return: list of x data
+        """
         x_list = [np.array([trial_data for trial_data in subj]) for subj in list_l]
         return x_list
 
     def x_reshape(self, list_l, input_shape):
-        # Reshape X data
+        """
+        Reshape the data into arrays of (trial x channels x sample time) shapes
+        :param list_l: lists of x data
+        :param input_shape: necessary shape for reshaping
+        :return: list of reshaped data
+        """
         return [np.transpose(l, (0, 2, 1)).reshape(l.shape[0], *input_shape) for l in list_l]
     
     def extract_event_sec_given_cue(self, list_l, cue_id, chans):
+        """
+        Extract the events corresponding to cue_id and chans given in list_l.
+        It will be used to extract unknown cue_id or start trial id for test data as it doesn't have labels info.
+        :param list_l: list of raw gdf files because we use mne library
+        :param cue_id: necessary id for extracting events
+        :param chans: necessary channels for extracting events (because raw gdf files have 25 channels)
+        :return: list of events corresponding to cue_id and channels
+        """
         event_cue_id = {f'{cue_id}': cue_id}
         list_event_sec = []
         for l in list_l:
@@ -123,9 +190,14 @@ class BCIIV2aPreprocessor:
         return list_event_sec   
 
     def extract_2_classes(self, list_l, channels):
-        # Extract data for two classes
+        """
+        Extract the events corresponding to cue_id and chans but two classes only for train data.
+        :param list_l: list of raw gdf files because we use mne library
+        :param channels: necessary channels for extracting events
+        :return: list of events corresponding to cue_id and channels
+        """
         eve_list_2_class, eve_sec_list_2_class, event_id_list_2_class, l_list_raw = [], [], [], []
-        event_id_2_class = {'769': 0, '770': 1}  # Mapping event IDs for two classes
+        event_id_2_class = {'769': 0, '770': 1}  # Mapping event IDs for two classes, '769'-left, '770'-right
         for l in list_l:
             l = l.pick_channels(channels)
             events_2_class, _ = mne.events_from_annotations(l, event_id=event_id_2_class)
@@ -139,9 +211,13 @@ class BCIIV2aPreprocessor:
             event_id_list_2_class.append(np.array(eve_id_2_class_rename))
         return eve_list_2_class, eve_sec_list_2_class, event_id_list_2_class, l_list_raw
 
-
-### just add one more def and return train/test/labels
     def preprocess_4class_dataset(self):
+        """
+        Preprocess the 4 class dataset for training and testing by using all above functions
+        :return:
+        - x_train, x_test: train and test data segmented and filtered with shape (trials, channels, samples)
+        - y_train, y_test: labels for train and test [0,1,2,3] with shape (trials, 1)
+        """
         y_train, y_test = self.load_true_labels_4class()
         train_data, test_data = self.load_dataset_gdf()
         channels, _ = self.select_eeg_chans()
@@ -153,7 +229,7 @@ class BCIIV2aPreprocessor:
         x_test_filtered = self.bandpass_filter(xtest)
         
         train_sec_4cl, test_sec_4cl = [], []
-        train_sec_4cl = self.extract_event_sec_given_cue(train_data, 768, channels)
+        train_sec_4cl = self.extract_event_sec_given_cue(train_data, 768, channels) #768 is 'start trial' label
         test_sec_4cl = self.extract_event_sec_given_cue(test_data, 768, channels)
 
         ### segment filtered dataset with the above interval, as it was from fix point, therefore +[3.5*250=875] and +[5.5*250=1375]
@@ -177,7 +253,12 @@ class BCIIV2aPreprocessor:
     
 
     def preprocess_2class_dataset(self):
-        
+        """
+        Preprocess the 2 class dataset for training and testing by using all above functions
+        :return:
+        - x_train, x_test: train and test data segmented and filtered with shape (trials, channels, samples)
+        - y_train, y_test: labels for train and test [0,1] with shape (trials, 1)
+        """
         y_train, y_test = self.extract_true_labels_2class()
         train_data, test_data = self.load_dataset_gdf()
         channels, _ = self.select_eeg_chans()
@@ -188,7 +269,7 @@ class BCIIV2aPreprocessor:
         x_train_filtered = self.bandpass_filter(xtrain)
         x_test_filtered = self.bandpass_filter(xtest)
         
-        # as there is no labels for test data, unknown cue will be extracted    
+        # as there is no labels for test data, '783' unknown cue will be extracted
         test_eve_unk_cue = self.extract_event_sec_given_cue(test_data, 783, channels)
         # Filter events time for labels 0 and 1
         test_event_time_2cl = []
@@ -218,6 +299,13 @@ class BCIIV2aPreprocessor:
         
         return x_train, x_test, y_train, y_test
 
-          
-    
-    
+if __name__ == '__main__':
+
+    preprocessor = BCIIV2aPreprocessor(subj_ids=[1, 2, 3, 4, 5, 6, 7, 8, 9], x_path='M:/RA Spring 24/Baseline_codes/BCICIV_2a_gdf/',
+                 y_path='M:/RA Spring 24/Baseline_codes/true_labels/', band=[0.5, 40])
+
+    #4 classes
+    x_train, x_test, y_train, y_test = preprocessor.preprocess_4class_dataset()
+
+    #2 classes
+    x_train_2cl, x_test_2cl, y_train_2cl, y_test_2cl = preprocessor.preprocess_2class_dataset()
