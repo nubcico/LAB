@@ -1,1 +1,6 @@
 xray report generation
+files that are too large to upload:
+
+data
+model_iu_xray
+Model_mimic_cxr
