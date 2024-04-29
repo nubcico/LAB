@@ -4,3 +4,5 @@ files that are too large to upload:
 data
 model_iu_xray
 Model_mimic_cxr
+results/iu_xray/current_checkpoint
+results/iu_xray/model_best
