@@ -21,9 +21,11 @@ from lightning.pytorch.loggers import TensorBoardLogger, CSVLogger
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 import time
+import gc
 # Generate a timestamp
 timestamp = time.strftime("%Y%m%d_%H%M%S")
 
+# version for subject dependent dataset
 class EEGDataset(data.Dataset):
      def __init__(self, x_tr, x_te, y_tr, y_te):
          super().__init__()
@@ -59,8 +61,8 @@ class EEGDataset(data.Dataset):
              return self.test_ds
          else:
              raise TypeError("Unknown type of split!")      
-
-#class for subj independent individual classification    
+'''
+# version for 6 subject OpenBCI subject independent
 class EEGDataset_indep(data.Dataset):
     def __init__(self, x_tr, x_te, y_tr, y_te, target_subject):
         super().__init__()
@@ -69,10 +71,9 @@ class EEGDataset_indep(data.Dataset):
             'x': self._concat_data_except_target(x_tr, x_te, target_subject),
             'y': self._concat_label_except_target(y_tr, y_te, target_subject),
         }
-        #x_te_transposed = np.transpose(x_te[target_subject], (0, 2, 1))
         self.test_ds = {
             'x': torch.tensor(x_te[target_subject]).float(),  # Convert to tensor
-            'y': torch.tensor(y_te[target_subject]).float(),  # Convert to tensor
+            'y': torch.tensor(y_te[target_subject][0,:]).float(),  # Convert to tensor
         }
         self.__split = None
 
@@ -87,9 +88,9 @@ class EEGDataset_indep(data.Dataset):
                 concatenated_data.append(torch.tensor(te_data).float())  # Convert to tensor
         # Concatenate and reshape the data
         concatenated_data = torch.cat(concatenated_data, dim=0)
-        #concatenated_data = concatenated_data.view(-1, 20, 200)  # Reshape to (num_samples, 20, 200)
         concatenated_data = torch.transpose(concatenated_data, 1, 2)
-        print(concatenated_data.shape())
+        # Run garbage collection
+        gc.collect()
         return concatenated_data
     
     def _concat_label_except_target(self, label_tr, label_te, target_subject):
@@ -97,13 +98,15 @@ class EEGDataset_indep(data.Dataset):
         concatenated_label = []
         for i, tr_label in enumerate(label_tr):
             if i != target_subject:
-                concatenated_label.append(torch.tensor(tr_label).float())  # Convert to tensor
+                concatenated_label.append(torch.tensor(tr_label[0,:]).float())  # Convert to tensor
         for i, te_label in enumerate(label_te):
             if i != target_subject:
-                concatenated_label.append(torch.tensor(te_label).float())  # Convert to tensor
+                concatenated_label.append(torch.tensor(te_label[0,:]).float())  # Convert to tensor
         # Concatenate and reshape the data
         concatenated_label = torch.cat(concatenated_label, dim=0)
         concatenated_label = concatenated_label.view(-1)  # Reshape to (num_samples)
+        # Run garbage collection
+        gc.collect()
         return concatenated_label
 
     def __len__(self):
@@ -114,6 +117,8 @@ class EEGDataset_indep(data.Dataset):
         y = self.dataset['y'][idx]
         x = torch.tensor(x).float()
         y = torch.tensor(y).unsqueeze(-1).float()
+        # Run garbage collection
+        gc.collect()
         return x, y
 
     def split(self, __split):
@@ -129,7 +134,78 @@ class EEGDataset_indep(data.Dataset):
             return self.test_ds
         else:
             raise TypeError("Unknown type of split!")
+'''
+# LOSO-CV fr 54 subjects, independent
+class EEGDataset_LOSO_CV:
+    def __init__(self, x_tr, x_te, y_tr, y_te, target_subject):
+        self.target_subject = target_subject
+        self.train_ds = {
+            'x': self._concat_data_except_target(x_tr, x_te, target_subject),
+            'y': self._concat_label_except_target(y_tr, y_te, target_subject),
+        }
+        self.test_ds = {
+            'x': x_te[target_subject].astype(np.float32),  # Convert to float32
+            'y': y_te[target_subject][0, :].astype(np.float32),  # Extract a single array and convert to float32
+        }
+        self.__split = None
 
+    def _concat_data_except_target(self, data_tr, data_te, target_subject):
+        # Concatenate train and test data of subjects excluding the target subject
+        concatenated_data = []
+        for i, tr_data in enumerate(data_tr):
+            if i != target_subject:
+                concatenated_data.append(tr_data.astype(np.float32))  # Convert to float32
+        for i, te_data in enumerate(data_te):
+            if i != target_subject:
+                concatenated_data.append(te_data.astype(np.float32))  # Convert to float32
+        # Concatenate and transpose the data
+        concatenated_data = np.concatenate(concatenated_data, axis=0)
+        concatenated_data = np.transpose(concatenated_data, (0, 1, 2))
+        # Run garbage collection if needed
+        gc.collect()
+        return concatenated_data
+
+    def _concat_label_except_target(self, label_tr, label_te, target_subject):
+        # Concatenate train and test labels of subjects excluding the target subject
+        concatenated_label = []
+        for i, tr_label in enumerate(label_tr):
+            if i != target_subject:
+                concatenated_label.append(tr_label[0, :].astype(np.float32))  # Convert to float32
+        for i, te_label in enumerate(label_te):
+            if i != target_subject:
+                concatenated_label.append(te_label[0, :].astype(np.float32))  # Convert to float32
+        # Concatenate and reshape the labels
+        concatenated_label = np.concatenate(concatenated_label, axis=0)
+        concatenated_label = concatenated_label.reshape(-1)  # Reshape to (num_samples,)
+        # Run garbage collection if needed
+        gc.collect()
+        return concatenated_label
+    
+    def __len__(self):
+        return len(self.dataset['x'])
+
+    def __getitem__(self, idx):
+        x = self.dataset['x'][idx]
+        y = self.dataset['y'][idx]
+        x = torch.tensor(x).float()
+        y = torch.tensor(y).unsqueeze(-1).float()
+        # Run garbage collection
+        gc.collect()
+        return x, y
+
+    def split(self, __split):
+        self.__split = __split
+        return self
+
+    @property
+    def dataset(self):
+        assert self.__split is not None, "Please specify the split of dataset!"
+        if self.__split == "train":
+            return self.train_ds
+        elif self.__split == "test":
+            return self.test_ds
+        else:
+            raise TypeError("Unknown type of split!")
 
 class AvgMeter(object):
     def __init__(self, num=40):
@@ -291,7 +367,8 @@ class TransformerBlock(nn.Module):
         x = self.layernorm1(x + y)
         return x
     
-    
+#train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=19)
+
 class EEGClassificationModel(nn.Module):
     def __init__(self, eeg_channel, dropout=0.1):
         super().__init__()
@@ -353,6 +430,6 @@ def initialize_trainer(SEED, CHECKPOINT_DIR, MAX_EPOCH):
         max_epochs=MAX_EPOCH,
         logger=[tensorboardlogger, csvlogger],
         callbacks=[lr_monitor, checkpoint, early_stopping],
-        log_every_n_steps=5,
+        log_every_n_steps=1,
     )
     return trainer

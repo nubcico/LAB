@@ -126,14 +126,6 @@ def EEGNet(nb_classes, Chans = 64, Samples = 128,
     return Model(inputs=input1, outputs=softmax)
 
 
-# need these for ShallowConvNet
-def square(x):
-    return K.square(x)
-
-def log(x):
-    return K.log(K.clip(x, min_value = 1e-7, max_value = 10000))
-
-
 # Two-losses EEGNet (Subject Identification and Motor Imagery Classification)
 def EEGNet_mt(nb_subjects, nb_classes, Chans=64, Samples=128, dropoutRate=0.5, kernLength=64, F1 = 8,
              D = 2, F2 = 16, norm_rate=0.25, dropoutType='Dropout'):
@@ -166,6 +158,6 @@ def EEGNet_mt(nb_subjects, nb_classes, Chans=64, Samples=128, dropoutRate=0.5, k
     dense_subject = Dense(nb_subjects, name='dense_subject', kernel_constraint=max_norm(norm_rate))(flatten)
     softmax_subject = Activation('softmax', name='softmax_subject')(dense_subject)
 
-    dense_lr = Dense(2, activation='sigmoid', name='dense_lr', kernel_constraint=max_norm(norm_rate))(flatten)
+    dense_lr = Dense(nb_classes, activation='softmax', name='dense_lr', kernel_constraint=max_norm(norm_rate))(flatten)
 
     return Model(inputs=input1, outputs=[softmax_subject, dense_lr])
